@@ -1,0 +1,995 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { GlitchPass } from 'three/addons/postprocessing/GlitchPass.js';
+import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
+import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js';
+import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+const canvas = document.querySelector('#webgl');
+const scrollPercent = document.querySelector('#scrollPercent');
+const chapterName = document.querySelector('#chapterName');
+const fxState = document.querySelector('#fxState');
+const materialName = document.querySelector('#materialName');
+const cursorRing = document.querySelector('#cursorRing');
+const cursorProgress = document.querySelector('#cursorProgress');
+const cursorLabel = document.querySelector('#cursorLabel');
+const sequenceCanvas = document.querySelector('#sequenceCanvas');
+const radarCanvas = document.querySelector('#radarCanvas');
+const assetStatus = document.querySelector('#assetStatus');
+const heroCopy = document.querySelector('#heroCopy');
+const kineticTitle = heroCopy?.querySelector('h1');
+const kineticTitleDock = document.createElement('div');
+kineticTitleDock.className = 'kinetic-title-dock';
+kineticTitleDock.innerHTML = `<span class="kinetic-title-kicker">00 / opening transmission</span><span class="kinetic-title-main">Cosmic <b>Nexus</b></span><span class="chapter-meter"><i></i></span>`;
+document.body.appendChild(kineticTitleDock);
+const kineticOrbitWord = document.createElement('div');
+kineticOrbitWord.className = 'kinetic-orbit-word';
+kineticOrbitWord.textContent = 'scroll controlled title';
+document.body.appendChild(kineticOrbitWord);
+const titleMotionHint = document.createElement('div');
+titleMotionHint.className = 'title-motion-hint';
+titleMotionHint.textContent = 'el título responde al scroll';
+document.body.appendChild(titleMotionHint);
+
+const clock = new THREE.Clock();
+const pointer = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+const selectedObjects = [];
+let selectedObject = null;
+let hoverObject = null;
+let scrollProgress = 0;
+let horizontalProgress = 0;
+let reducedMotion = false;
+let audioOn = false;
+let glbRoot = null;
+let glbMixer = null;
+let transformEnabled = false;
+let darkGrade = true;
+let starsVisible = true;
+let smokeVisible = true;
+let portalVisible = true;
+let lensflareVisible = true;
+let hudVisible = true;
+let radarVisible = true;
+let cursorVisible = true;
+let userGlowAmount = 0.28;
+
+document.body.classList.add('v9-dark-grade','v9-muted-light');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x010208);
+scene.fog = new THREE.FogExp2(0x010208, 0.018);
+
+const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.05, 600);
+camera.position.set(0, 2.8, 9.5);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.58;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.xr.enabled = true;
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.minDistance = 2.2;
+controls.maxDistance = 42;
+controls.target.set(0, 0, 0);
+controls.enablePan = false;
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.style.position = 'fixed';
+labelRenderer.domElement.style.inset = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+labelRenderer.domElement.style.zIndex = '6';
+document.body.appendChild(labelRenderer.domElement);
+
+const transformControls = new TransformControls(camera, renderer.domElement);
+transformControls.enabled = false;
+transformControls.visible = false;
+transformControls.addEventListener('dragging-changed', (event) => { controls.enabled = !event.value; });
+scene.add(transformControls);
+
+try {
+  const vr = VRButton.createButton(renderer);
+  document.querySelector('#xrMount')?.appendChild(vr);
+} catch (error) {
+  console.warn('VRButton no disponible:', error);
+}
+
+const renderPass = new RenderPass(scene, camera);
+const outlinePass = new OutlinePass(new THREE.Vector2(innerWidth, innerHeight), scene, camera);
+outlinePass.edgeStrength = 4.6;
+outlinePass.edgeGlow = 0.55;
+outlinePass.edgeThickness = 1.2;
+outlinePass.visibleEdgeColor.set(0x8fe8ff);
+outlinePass.hiddenEdgeColor.set(0x5a3bb9);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.42, 0.54);
+const glitchPass = new GlitchPass();
+glitchPass.enabled = false;
+const filmPass = new FilmPass(0.10, 0.06, 720, false);
+filmPass.enabled = true;
+const afterimagePass = new AfterimagePass(0.86);
+afterimagePass.enabled = false;
+const bokehPass = new BokehPass(scene, camera, { focus: 7, aperture: 0.00022, maxblur: 0.009 });
+bokehPass.enabled = false;
+const ssaoPass = new SSAOPass(scene, camera, innerWidth, innerHeight);
+ssaoPass.kernelRadius = 9;
+ssaoPass.minDistance = 0.004;
+ssaoPass.maxDistance = 0.16;
+ssaoPass.enabled = false;
+const rgbShiftPass = new ShaderPass(RGBShiftShader);
+rgbShiftPass.uniforms.amount.value = 0.0018;
+rgbShiftPass.enabled = false;
+const smaaPass = new SMAAPass(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
+const outputPass = new OutputPass();
+
+const composer = new EffectComposer(renderer);
+composer.addPass(renderPass);
+composer.addPass(ssaoPass);
+composer.addPass(outlinePass);
+composer.addPass(bloomPass);
+composer.addPass(afterimagePass);
+composer.addPass(glitchPass);
+composer.addPass(rgbShiftPass);
+composer.addPass(filmPass);
+composer.addPass(bokehPass);
+composer.addPass(smaaPass);
+composer.addPass(outputPass);
+
+scene.add(new THREE.AmbientLight(0x3d5f83, 0.08));
+const keyLight = new THREE.DirectionalLight(0xb8dcff, 0.46);
+keyLight.position.set(-4, 7, 5);
+keyLight.castShadow = true;
+scene.add(keyLight);
+const rimLight = new THREE.PointLight(0x77ddff, 2.2, 42, 1.8);
+rimLight.position.set(4, 2.5, 2.2);
+scene.add(rimLight);
+const portalLight = new THREE.PointLight(0x8fe8ff, 0, 64, 1.3);
+portalLight.position.set(0, 0, -6);
+scene.add(portalLight);
+
+function makeGlowTexture() {
+  const size = 256;
+  const canvasTex = document.createElement('canvas');
+  canvasTex.width = canvasTex.height = size;
+  const ctx = canvasTex.getContext('2d');
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.08, 'rgba(210,245,255,.95)');
+  gradient.addColorStop(0.35, 'rgba(120,180,255,.45)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvasTex);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeSmokeTexture() {
+  const size = 512;
+  const canvasTex = document.createElement('canvas');
+  canvasTex.width = canvasTex.height = size;
+  const ctx = canvasTex.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  for (let i = 0; i < 80; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 35 + Math.random() * 130;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${80 + Math.random() * 80},${160 + Math.random() * 80},255,.045)`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const texture = new THREE.CanvasTexture(canvasTex);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const glowTexture = makeGlowTexture();
+const smokeTexture = makeSmokeTexture();
+
+function createLabel(text) {
+  const element = document.createElement('div');
+  element.className = 'label';
+  element.textContent = text;
+  return new CSS2DObject(element);
+}
+
+function createStarfield(count, radius, size) {
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const scales = new Float32Array(count);
+  const colorA = new THREE.Color(0x8fb7ff);
+  const colorB = new THREE.Color(0xffd3a1);
+  const colorC = new THREE.Color(0xffffff);
+  for (let i = 0; i < count; i++) {
+    const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    const d = radius * (0.2 + Math.pow(Math.random(), 0.35) * 0.8);
+    positions.set([v.x * d, v.y * d, v.z * d], i * 3);
+    const c = colorC.clone();
+    const t = Math.random();
+    if (t < 0.28) c.lerp(colorA, 0.55);
+    if (t > 0.86) c.lerp(colorB, 0.45);
+    c.multiplyScalar(0.24 + Math.random() * 0.34);
+    colors.set([c.r, c.g, c.b], i * 3);
+    scales[i] = 0.55 + Math.random() * 1.8;
+  }
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+  const material = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uSize: { value: size }, uPixelRatio: { value: renderer.getPixelRatio() }, uOpacity: { value: 1 } },
+    vertexShader: `
+      attribute float aScale;
+      varying vec3 vColor;
+      uniform float uTime;
+      uniform float uSize;
+      uniform float uPixelRatio;
+      void main(){
+        vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float twinkle = 0.72 + 0.28 * sin(uTime * 1.8 + position.x * .23 + position.z * .19);
+        gl_PointSize = uSize * aScale * uPixelRatio * twinkle * (130.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      uniform float uOpacity;
+      void main(){
+        float d = distance(gl_PointCoord, vec2(.5));
+        float alpha = smoothstep(.5, .05, d) * uOpacity;
+        gl_FragColor = vec4(vColor, alpha);
+      }
+    `,
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const points = new THREE.Points(geometry, material);
+  points.userData.starMaterial = material;
+  return points;
+}
+
+const deepStars = createStarfield(22000, 260, 0.82);
+const nearStars = createStarfield(6200, 110, 1.05);
+scene.add(deepStars, nearStars);
+
+const smokeGroup = new THREE.Group();
+scene.add(smokeGroup);
+for (let i = 0; i < 38; i++) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTexture, color: i % 2 ? 0x629cff : 0x7af7d4, opacity: 0.0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sprite.position.set((Math.random() - 0.5) * 26, (Math.random() - 0.5) * 12, -8 - Math.random() * 24);
+  sprite.scale.setScalar(5 + Math.random() * 12);
+  sprite.userData.baseOpacity = 0.018 + Math.random() * 0.042;
+  sprite.userData.speed = 0.03 + Math.random() * 0.08;
+  smokeGroup.add(sprite);
+}
+
+const coreUniforms = {
+  uTime: { value: 0 },
+  uReveal: { value: 0 },
+  uEnergy: { value: 0.35 },
+  uTint: { value: new THREE.Color(0x62e8ff) },
+  uWire: { value: 0 }
+};
+const coreMaterial = new THREE.ShaderMaterial({
+  uniforms: coreUniforms,
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vWorld;
+    void main(){
+      vUv = uv;
+      vNormal = normalize(normalMatrix * normal);
+      vec4 world = modelMatrix * vec4(position, 1.0);
+      vWorld = world.xyz;
+      gl_Position = projectionMatrix * viewMatrix * world;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform float uReveal;
+    uniform float uEnergy;
+    uniform vec3 uTint;
+    uniform float uWire;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vWorld;
+    float grid(vec2 uv, float s){
+      vec2 g = abs(fract(uv * s - .5) - .5) / fwidth(uv * s);
+      return 1.0 - min(min(g.x,g.y),1.0);
+    }
+    void main(){
+      vec3 viewDir = normalize(cameraPosition - vWorld);
+      float fresnel = pow(1.0 - max(dot(viewDir, normalize(vNormal)), 0.0), 2.4);
+      float band = smoothstep(uReveal - .18, uReveal, vUv.x) - smoothstep(uReveal, uReveal + .18, vUv.x);
+      float scan = .5 + .5 * sin((vUv.y + uTime * .08) * 70.0);
+      float latitude = smoothstep(.0,.85,1.0 - abs(vUv.y - .5) * 2.0);
+      float wire = grid(vUv, 16.0) * uWire;
+      vec3 base = uTint * (.055 + latitude * .18);
+      vec3 energy = uTint * (band * (.55 + scan * .38) + fresnel * (.55 + uEnergy * .46));
+      vec3 color = base + energy + vec3(wire);
+      float alpha = .88 + fresnel * .12;
+      gl_FragColor = vec4(color, alpha);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide
+});
+
+const coreGroup = new THREE.Group();
+scene.add(coreGroup);
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.45, 6), coreMaterial);
+core.castShadow = true;
+core.receiveShadow = true;
+core.userData.selectable = true;
+core.userData.name = 'Nexus Core';
+selectedObjects.push(core);
+coreGroup.add(core);
+const coreLabel = createLabel('NEXUS CORE');
+coreLabel.position.set(0, 1.9, 0);
+core.add(coreLabel);
+
+const ringGroup = new THREE.Group();
+coreGroup.add(ringGroup);
+for (let i = 0; i < 5; i++) {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.15 + i * 0.24, 0.012, 8, 240),
+    new THREE.MeshBasicMaterial({ color: i % 2 ? 0x7af7d4 : 0x8fe8ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  ring.rotation.set(Math.PI / (2.2 + i * 0.2), i * 0.62, i * 0.72);
+  ringGroup.add(ring);
+}
+
+const arcGroup = new THREE.Group();
+coreGroup.add(arcGroup);
+for (let i = 0; i < 10; i++) {
+  const angle = (i / 10) * Math.PI * 2;
+  const p0 = new THREE.Vector3(Math.cos(angle) * 1.55, Math.sin(angle) * 1.55, 0);
+  const p1 = new THREE.Vector3(Math.cos(angle + .34) * 2.4, Math.sin(angle + .34) * 2.4, 0.9 * Math.sin(i));
+  const p2 = new THREE.Vector3(Math.cos(angle + .7) * 1.55, Math.sin(angle + .7) * 1.55, 0);
+  const curve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 42, 0.01, 5, false), new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8fe8ff : 0x9d7cff, transparent: true, opacity: .11, blending: THREE.AdditiveBlending, depthWrite: false }));
+  arcGroup.add(tube);
+}
+
+const portalGroup = new THREE.Group();
+portalGroup.position.set(0, 0, -7);
+scene.add(portalGroup);
+for (let i = 0; i < 9; i++) {
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(1.2 + i * 0.24, 0.012, 12, 180), new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8fe8ff : 0x7af7d4, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  torus.rotation.z = i * 0.2;
+  portalGroup.add(torus);
+}
+const tunnelGroup = new THREE.Group();
+portalGroup.add(tunnelGroup);
+for (let i = 0; i < 36; i++) {
+  const circle = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 96 }, (_, j) => {
+    const a = (j / 96) * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(a), Math.sin(a), -i * 0.48);
+  })), new THREE.LineBasicMaterial({ color: 0x8fe8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }));
+  circle.scale.setScalar(1.0 + i * 0.055);
+  tunnelGroup.add(circle);
+}
+
+const lensLight = new THREE.PointLight(0x8fe8ff, 1.15, 70, 1.8);
+lensLight.position.set(-5, 4, -3);
+scene.add(lensLight);
+try {
+  const flare = new Lensflare();
+  flare.addElement(new LensflareElement(glowTexture, 92, 0, new THREE.Color(0x8fe8ff)));
+  flare.addElement(new LensflareElement(glowTexture, 22, 0.5, new THREE.Color(0x9d7cff)));
+  lensLight.add(flare);
+} catch (error) {
+  console.warn('Lensflare no disponible:', error);
+}
+
+const asteroidGeometry = new THREE.DodecahedronGeometry(1, 0);
+const asteroidMaterial = new THREE.MeshStandardMaterial({ color: 0x6e7886, roughness: 0.96, metalness: 0.08 });
+const asteroids = new THREE.InstancedMesh(asteroidGeometry, asteroidMaterial, 900);
+const tempObject = new THREE.Object3D();
+for (let i = 0; i < 900; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = 5 + Math.random() * 16;
+  tempObject.position.set(Math.cos(a) * r, (Math.random() - 0.5) * 4, Math.sin(a) * r);
+  tempObject.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+  tempObject.scale.setScalar(0.025 + Math.random() * 0.09);
+  tempObject.updateMatrix();
+  asteroids.setMatrixAt(i, tempObject.matrix);
+}
+scene.add(asteroids);
+
+const lod = new THREE.LOD();
+const lodHigh = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 32), new THREE.MeshStandardMaterial({ color: 0x9d7cff, roughness: .3, metalness: .5 }));
+const lodLow = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), new THREE.MeshStandardMaterial({ color: 0x9d7cff, roughness: .4, metalness: .5 }));
+lod.addLevel(lodHigh, 0);
+lod.addLevel(lodLow, 18);
+lod.position.set(-3.6, 0.2, -1.4);
+lod.userData.selectable = true;
+lod.userData.name = 'LOD Beacon';
+selectedObjects.push(lod);
+scene.add(lod);
+const lodLabel = createLabel('LOD BEACON');
+lodLabel.position.set(0, .75, 0);
+lod.add(lodLabel);
+
+function createGridHelper() {
+  const group = new THREE.Group();
+  for (let r = 2; r <= 14; r += 2) {
+    const pts = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = i / 128 * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * r, -1.9, Math.sin(a) * r));
+    }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x356c86, transparent: true, opacity: 0.12 }));
+    group.add(line);
+  }
+  return group;
+}
+const scaleGrid = createGridHelper();
+scene.add(scaleGrid);
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+let audioNodes = null;
+function initAudio() {
+  if (audioNodes) return audioNodes;
+  const context = listener.context;
+  const master = context.createGain();
+  master.gain.value = 0;
+  const filter = context.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 470;
+  const oscA = context.createOscillator();
+  const oscB = context.createOscillator();
+  oscA.type = 'sine';
+  oscB.type = 'triangle';
+  oscA.frequency.value = 54;
+  oscB.frequency.value = 82;
+  const gainA = context.createGain();
+  const gainB = context.createGain();
+  gainA.gain.value = .55;
+  gainB.gain.value = .12;
+  oscA.connect(gainA).connect(filter).connect(master).connect(context.destination);
+  oscB.connect(gainB).connect(filter);
+  oscA.start();
+  oscB.start();
+  audioNodes = { context, master, filter, oscA, oscB };
+  return audioNodes;
+}
+
+document.querySelector('#audioBtn')?.addEventListener('click', async () => {
+  const nodes = initAudio();
+  await nodes.context.resume();
+  audioOn = !audioOn;
+  nodes.master.gain.setTargetAtTime(audioOn ? 0.018 : 0, nodes.context.currentTime, 0.12);
+  document.querySelector('#audioBtn').textContent = audioOn ? 'Audio ON' : 'Audio OFF';
+});
+
+document.querySelector('#fullBtn')?.addEventListener('click', async () => {
+  if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+  else await document.exitFullscreen();
+});
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+const ktx2Loader = new KTX2Loader();
+ktx2Loader.setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/libs/basis/');
+ktx2Loader.detectSupport(renderer);
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
+gltfLoader.setKTX2Loader(ktx2Loader);
+
+document.querySelector('#loadGlbBtn')?.addEventListener('click', () => {
+  assetStatus.textContent = 'Cargando assets/models/model.glb ...';
+  gltfLoader.load('./assets/models/model.glb', (gltf) => {
+    if (glbRoot) scene.remove(glbRoot);
+    glbRoot = gltf.scene;
+    glbRoot.position.set(0, -0.25, 0);
+    glbRoot.scale.setScalar(1.25);
+    scene.add(glbRoot);
+    selectedObject = glbRoot;
+    selectedObjects.push(glbRoot);
+    outlinePass.selectedObjects = [glbRoot];
+    if (gltf.animations.length) {
+      glbMixer = new THREE.AnimationMixer(glbRoot);
+      for (const clip of gltf.animations) glbMixer.clipAction(clip).play();
+    }
+    transformControls.attach(glbRoot);
+    assetStatus.textContent = `GLB cargado: ${gltf.animations.length} animación(es).`;
+  }, (progress) => {
+    if (progress.total) assetStatus.textContent = `Cargando GLB: ${Math.round(progress.loaded / progress.total * 100)}%`;
+  }, (error) => {
+    assetStatus.textContent = 'No se encontró assets/models/model.glb. Exporta desde Blender como GLB y colócalo en esa ruta.\n' + error.message;
+  });
+});
+
+document.querySelector('#assetCheckBtn')?.addEventListener('click', async () => {
+  const checks = ['./assets/models/model.glb', './assets/textures/studio.hdr', './assets/video/demo.mp4', './assets/lottie/animation.json'];
+  const lines = [];
+  for (const path of checks) {
+    try {
+      const response = await fetch(path, { method: 'HEAD' });
+      lines.push(`${response.ok ? 'OK ' : 'NO '} ${path}`);
+    } catch {
+      lines.push(`NO ${path}`);
+    }
+  }
+  assetStatus.textContent = lines.join('\n');
+});
+
+document.querySelector('#resetCameraBtn')?.addEventListener('click', () => {
+  controls.target.set(0, 0, 0);
+  gsap.to(camera.position, { x: 0, y: 2.8, z: 9.5, duration: 1.2, ease: 'power3.out' });
+});
+
+const fxButtons = document.querySelectorAll('[data-fx]');
+function updateFxState() {
+  const active = [];
+  if (bloomPass.enabled) active.push('Bloom');
+  if (glitchPass.enabled) active.push('Glitch');
+  if (rgbShiftPass.enabled) active.push('RGB');
+  if (filmPass.enabled) active.push('Film');
+  if (afterimagePass.enabled) active.push('After');
+  if (bokehPass.enabled) active.push('Depth');
+  if (ssaoPass.enabled) active.push('SSAO');
+  fxState.textContent = active.slice(0, 3).join(' + ') || 'Clean';
+}
+
+function applyDarkGrade() {
+  document.body.classList.toggle('v9-dark-grade', darkGrade);
+  renderer.toneMappingExposure = darkGrade ? (0.42 + userGlowAmount * 0.42) : (0.70 + userGlowAmount * 0.56);
+  bloomPass.strength = darkGrade ? (0.16 + userGlowAmount * 0.42) : (0.34 + userGlowAmount * 0.8);
+  bloomPass.radius = darkGrade ? 0.32 : 0.62;
+  bloomPass.threshold = darkGrade ? 0.62 : 0.36;
+  rimLight.intensity = darkGrade ? (0.95 + userGlowAmount * 3.0) : (2.2 + userGlowAmount * 5.0);
+  keyLight.intensity = darkGrade ? 0.38 : 0.72;
+  lensLight.intensity = lensflareVisible ? (darkGrade ? 0.62 : 1.35) : 0;
+  deepStars.userData.starMaterial.uniforms.uOpacity.value = starsVisible ? (darkGrade ? 0.62 : 1.0) : 0;
+  nearStars.userData.starMaterial.uniforms.uOpacity.value = starsVisible ? (darkGrade ? 0.55 : 0.95) : 0;
+}
+function setAllFxPreset(mode) {
+  if (mode === 'reset') {
+    bloomPass.enabled = true; glitchPass.enabled = false; rgbShiftPass.enabled = false; filmPass.enabled = true; afterimagePass.enabled = false; bokehPass.enabled = false; ssaoPass.enabled = false; outlinePass.enabled = true;
+    coreUniforms.uWire.value = 0; reducedMotion = false; document.body.classList.remove('reduced-motion');
+    starsVisible = smokeVisible = portalVisible = lensflareVisible = hudVisible = radarVisible = cursorVisible = true;
+    ringGroup.visible = arcGroup.visible = asteroids.visible = scaleGrid.visible = true; labelRenderer.domElement.style.display = 'block';
+    document.querySelector('#scanlineLayer')?.classList.remove('active');
+    document.querySelectorAll('[data-fx]').forEach(b => b.classList.toggle('active', ['dark','film','outline','stars','smoke','portal','rings','arcs','asteroids','grid','labels','hud','radar','cursor','lensflare'].includes(b.dataset.fx)));
+  }
+  if (mode === 'max') {
+    bloomPass.enabled = glitchPass.enabled = rgbShiftPass.enabled = filmPass.enabled = afterimagePass.enabled = bokehPass.enabled = ssaoPass.enabled = outlinePass.enabled = true;
+    starsVisible = smokeVisible = portalVisible = lensflareVisible = hudVisible = radarVisible = cursorVisible = true;
+    ringGroup.visible = arcGroup.visible = asteroids.visible = scaleGrid.visible = true; labelRenderer.domElement.style.display = 'block';
+    document.querySelector('#scanlineLayer')?.classList.add('active');
+    document.querySelectorAll('[data-fx]').forEach(b => { if (b.dataset.fx !== 'resetfx') b.classList.add('active'); });
+  }
+  applyDarkGrade(); updateFxState();
+}
+
+function toggleFx(name, button) {
+  if (name === 'bloom') bloomPass.enabled = !bloomPass.enabled;
+  if (name === 'glitch') glitchPass.enabled = !glitchPass.enabled;
+  if (name === 'rgb') rgbShiftPass.enabled = !rgbShiftPass.enabled;
+  if (name === 'film') filmPass.enabled = !filmPass.enabled;
+  if (name === 'after') afterimagePass.enabled = !afterimagePass.enabled;
+  if (name === 'bokeh') bokehPass.enabled = !bokehPass.enabled;
+  if (name === 'ssao') ssaoPass.enabled = !ssaoPass.enabled;
+  if (name === 'outline') outlinePass.enabled = !outlinePass.enabled;
+  if (name === 'scanlines') document.querySelector('#scanlineLayer')?.classList.toggle('active');
+  if (name === 'transform') {
+    transformEnabled = !transformEnabled;
+    transformControls.enabled = transformEnabled;
+    transformControls.visible = transformEnabled;
+    transformControls.attach(selectedObject || core);
+  }
+  if (name === 'wire') coreUniforms.uWire.value = coreUniforms.uWire.value > 0 ? 0 : 1;
+  if (name === 'reduced') {
+    reducedMotion = !reducedMotion;
+    document.body.classList.toggle('reduced-motion', reducedMotion);
+  }
+
+  if (name === 'dark') { darkGrade = !darkGrade; applyDarkGrade(); }
+  if (name === 'softbloom') { bloomPass.enabled = true; bloomPass.strength = 0.18; bloomPass.radius = 0.28; bloomPass.threshold = 0.68; }
+  if (name === 'maxfx') { setAllFxPreset('max'); updateFxState(); return; }
+  if (name === 'resetfx') { setAllFxPreset('reset'); updateFxState(); return; }
+  if (name === 'stars') { starsVisible = !starsVisible; deepStars.visible = nearStars.visible = starsVisible; }
+  if (name === 'smoke') { smokeVisible = !smokeVisible; smokeGroup.visible = smokeVisible; }
+  if (name === 'portal') { portalVisible = !portalVisible; portalGroup.visible = portalVisible; portalLight.visible = portalVisible; }
+  if (name === 'rings') ringGroup.visible = !ringGroup.visible;
+  if (name === 'arcs') arcGroup.visible = !arcGroup.visible;
+  if (name === 'asteroids') asteroids.visible = !asteroids.visible;
+  if (name === 'grid') scaleGrid.visible = !scaleGrid.visible;
+  if (name === 'labels') labelRenderer.domElement.style.display = labelRenderer.domElement.style.display === 'none' ? 'block' : 'none';
+  if (name === 'hud') { hudVisible = !hudVisible; document.querySelector('#docHud')?.classList.toggle('v9-hidden', !hudVisible); document.querySelector('#materialPanel')?.classList.toggle('v9-hidden', !hudVisible); }
+  if (name === 'radar') { radarVisible = !radarVisible; document.querySelector('#miniRadar')?.classList.toggle('v9-hidden', !radarVisible); document.querySelector('#distanceRuler')?.classList.toggle('v9-hidden', !radarVisible); }
+  if (name === 'cursor') { cursorVisible = !cursorVisible; cursorRing.classList.toggle('hidden', !cursorVisible); }
+  if (name === 'lensflare') { lensflareVisible = !lensflareVisible; lensLight.visible = lensflareVisible; }
+
+  button?.classList.toggle('active');
+  updateFxState();
+}
+fxButtons.forEach((button) => button.addEventListener('click', () => toggleFx(button.dataset.fx, button)));
+document.querySelector('#glowRange')?.addEventListener('input', (event) => { userGlowAmount = Number(event.target.value) / 100; applyDarkGrade(); });
+document.querySelector('#darkPresetBtn')?.addEventListener('click', () => { darkGrade = true; userGlowAmount = 0.18; const input = document.querySelector('#glowRange'); if (input) input.value = '18'; applyDarkGrade(); });
+applyDarkGrade();
+updateFxState();
+
+const materialConfigs = {
+  '#62e8ff': { metalness: 0.38, roughness: .18 },
+  '#0f172a': { metalness: 0.85, roughness: .26 },
+  '#ffce62': { metalness: 0.72, roughness: .18 },
+  '#ff4f88': { metalness: 0.42, roughness: .28 },
+  '#7af7d4': { metalness: 0.34, roughness: .2 },
+  '#9d7cff': { metalness: 0.5, roughness: .18 },
+  '#e7eef7': { metalness: 0.88, roughness: .12 }
+};
+document.querySelectorAll('#swatches button').forEach((button) => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('#swatches button').forEach((b) => b.classList.remove('active'));
+    button.classList.add('active');
+    const color = new THREE.Color(button.dataset.color);
+    coreUniforms.uTint.value.copy(color);
+    rimLight.color.copy(color);
+    portalLight.color.copy(color);
+    materialName.textContent = button.dataset.name;
+    const cfg = materialConfigs[button.dataset.color] || { metalness: .5, roughness: .2 };
+    asteroidMaterial.metalness = cfg.metalness * .35;
+    asteroidMaterial.roughness = cfg.roughness + .45;
+  });
+});
+
+window.addEventListener('pointermove', (event) => {
+  cursorRing.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+  pointer.x = (event.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(event.clientY / innerHeight) * 2 + 1;
+});
+window.addEventListener('pointerdown', () => {
+  cursorLabel.textContent = 'HOLD';
+  cursorProgress.style.strokeDashoffset = '90';
+});
+window.addEventListener('pointerup', () => {
+  cursorLabel.textContent = 'SCROLL';
+  cursorProgress.style.strokeDashoffset = String(270 * (1 - scrollProgress));
+});
+
+canvas.addEventListener('pointerup', () => {
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(selectedObjects, true);
+  if (hits.length) {
+    let obj = hits[0].object;
+    while (obj && !selectedObjects.includes(obj)) obj = obj.parent;
+    selectedObject = obj || hits[0].object;
+    outlinePass.selectedObjects = [selectedObject];
+    transformControls.attach(selectedObject);
+  }
+});
+
+function getPageProgress() {
+  return Math.min(1, Math.max(0, scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight)));
+}
+
+function updateChapterRail(index) {
+  document.querySelectorAll('.chapter-rail [data-step]').forEach((node, i) => node.classList.toggle('active', i === index));
+}
+
+const chapterNames = ['Hero', 'Orbit', 'Shader', 'Portal', 'Horizontal', 'Lab'];
+const kineticChapterMeta = [
+  { code: '00 / opening transmission', title: 'Cosmic <b>Nexus</b>' },
+  { code: '01 / camera rail', title: 'Orbital <b>Drift</b>' },
+  { code: '02 / shader reveal', title: 'Core <b>Highlight</b>' },
+  { code: '03 / wormhole', title: 'Portal <b>Awakening</b>' },
+  { code: '04 / horizontal journey', title: 'Immersive <b>Traverse</b>' },
+  { code: '05 / fx laboratory', title: 'Effects <b>Atlas</b>' },
+  { code: '06 / launch', title: 'Final <b>Sequence</b>' }
+];
+
+function updateKineticTitle(progress, chapter) {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const split = THREE.MathUtils.smoothstep(p, 0.015, 0.24);
+  const compact = THREE.MathUtils.smoothstep(p, 0.06, 0.30);
+  const fade = 1 - THREE.MathUtils.smoothstep(p, 0.11, 0.34);
+  const mobile = innerWidth < 900;
+  const titleX = mobile ? 0 : -compact * 92;
+  const titleY = mobile ? -compact * 32 : -compact * 178;
+  const titleScale = mobile ? 1 - compact * .22 : 1 - compact * .58;
+  const titleRotate = mobile ? 0 : -compact * 2.8;
+  const titleBlur = Math.max(0, (compact - .62) * 4.2);
+  document.documentElement.style.setProperty('--title-x', `${titleX.toFixed(2)}px`);
+  document.documentElement.style.setProperty('--title-y', `${titleY.toFixed(2)}px`);
+  document.documentElement.style.setProperty('--title-scale', titleScale.toFixed(3));
+  document.documentElement.style.setProperty('--title-rotate', `${titleRotate.toFixed(2)}deg`);
+  document.documentElement.style.setProperty('--title-opacity', Math.max(0, fade).toFixed(3));
+  document.documentElement.style.setProperty('--title-blur', `${titleBlur.toFixed(2)}px`);
+  document.documentElement.style.setProperty('--title-split', split.toFixed(3));
+  document.documentElement.style.setProperty('--title-letter', `${(-0.07 + split * 0.045).toFixed(3)}em`);
+
+  const dockOpacity = THREE.MathUtils.smoothstep(p, 0.075, 0.22) * (1 - THREE.MathUtils.smoothstep(p, 0.92, 1.0) * .28);
+  const dockY = 22 - dockOpacity * 22 + Math.sin(p * Math.PI * 5.0) * 5.0;
+  const dockRotate = Math.sin(p * Math.PI * 2.0) * .85;
+  document.documentElement.style.setProperty('--chapter-title-opacity', dockOpacity.toFixed(3));
+  document.documentElement.style.setProperty('--chapter-title-y', `${dockY.toFixed(2)}px`);
+  document.documentElement.style.setProperty('--chapter-title-rotate', `${dockRotate.toFixed(2)}deg`);
+  document.documentElement.style.setProperty('--chapter-progress', `${Math.round(p * 100)}%`);
+  document.body.classList.toggle('title-compact', compact > .28);
+
+  const meta = kineticChapterMeta[chapter] || kineticChapterMeta[kineticChapterMeta.length - 1];
+  const nextMeta = kineticChapterMeta[Math.min(kineticChapterMeta.length - 1, chapter + 1)] || meta;
+  const local = Math.min(1, Math.max(0, (p * 6) - chapter));
+  const phase = local < .5 ? meta : nextMeta;
+  kineticTitleDock.querySelector('.kinetic-title-kicker').textContent = phase.code;
+  kineticTitleDock.querySelector('.kinetic-title-main').innerHTML = phase.title;
+  kineticOrbitWord.textContent = `${phase.code.replace(' / ', ' // ')} // ${Math.round(p * 100)}%`;
+}
+
+function syncScroll(progress) {
+  scrollProgress = progress;
+  scrollPercent.textContent = `${Math.round(progress * 100)}%`;
+  cursorProgress.style.strokeDashoffset = String(270 * (1 - progress));
+  const chapter = Math.min(5, Math.floor(progress * 6));
+  chapterName.textContent = chapterNames[chapter] || 'Final';
+  updateChapterRail(chapter);
+  updateKineticTitle(progress, chapter);
+
+  const reveal = THREE.MathUtils.smoothstep(progress, .08, .52);
+  const portal = THREE.MathUtils.smoothstep(progress, .34, .72);
+  const smoke = THREE.MathUtils.smoothstep(progress, .12, .78);
+  coreUniforms.uReveal.value = reveal;
+  coreUniforms.uEnergy.value = 0.35 + progress * 1.25 + horizontalProgress * 0.65;
+
+  portalGroup.scale.setScalar(0.55 + portal * 2.4);
+  portalGroup.rotation.z = progress * Math.PI * 2;
+  portalLight.intensity = portalVisible ? portal * (darkGrade ? 5.2 : 10.0) : 0;
+  portalGroup.children.forEach((child, i) => {
+    if (child.material) child.material.opacity = portal * (0.09 + i * 0.018);
+  });
+  tunnelGroup.children.forEach((child, i) => {
+    child.material.opacity = portal * Math.max(0, 0.18 - i * 0.003);
+  });
+
+  smokeGroup.children.forEach((sprite, i) => {
+    sprite.material.opacity = smokeVisible ? smoke * sprite.userData.baseOpacity : 0;
+    sprite.position.y += Math.sin(performance.now() * 0.0002 + i) * 0.0008;
+  });
+
+  const x = Math.sin(progress * Math.PI * 2.2) * (2.5 + progress * 2.2);
+  const y = 2.6 - progress * 1.1 + Math.sin(progress * Math.PI) * 0.8;
+  const z = 9.5 - progress * 8.0;
+  if (!transformControls.dragging) {
+    camera.position.lerp(new THREE.Vector3(x, y, z), reducedMotion ? 0.02 : 0.055);
+    controls.target.lerp(new THREE.Vector3(0, 0, -portal * 2.2), 0.055);
+  }
+
+  if (bloomPass.enabled) bloomPass.strength = (darkGrade ? 0.14 : 0.30) + userGlowAmount * 0.42 + progress * (darkGrade ? 0.10 : 0.22) + horizontalProgress * (darkGrade ? 0.08 : 0.16);
+  rgbShiftPass.uniforms.amount.value = portal * (darkGrade ? 0.0022 : 0.005) + (horizontalProgress > .75 ? (darkGrade ? .0015 : .0035) : 0);
+  afterimagePass.enabled = portal > .55 || afterimagePass.enabled;
+  if (progress < .32 && !document.querySelector('[data-fx="after"]')?.classList.contains('active')) afterimagePass.enabled = false;
+
+  drawSequence(progress);
+  drawRadar(progress);
+}
+
+function drawSequence(progress) {
+  const ctx = sequenceCanvas.getContext('2d');
+  const w = sequenceCanvas.width;
+  const h = sequenceCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const g = ctx.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, '#07101f');
+  g.addColorStop(1, '#071a25');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(143,232,255,.25)';
+  ctx.beginPath();
+  for (let x = 0; x < w; x++) {
+    const t = x / w;
+    const y = h * .5 + Math.sin(t * Math.PI * 8 + progress * Math.PI * 4) * 20 * (0.4 + progress);
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  for (let i = 0; i < 26; i++) {
+    const x = (i / 25) * w;
+    const active = i / 25 < progress;
+    ctx.fillStyle = active ? '#8fe8ff' : 'rgba(143,232,255,.16)';
+    ctx.fillRect(x, h - 18, 8, active ? -34 : -12);
+  }
+}
+
+function drawRadar(progress) {
+  const ctx = radarCanvas.getContext('2d');
+  const w = radarCanvas.width;
+  const c = w / 2;
+  ctx.clearRect(0, 0, w, w);
+  ctx.strokeStyle = 'rgba(143,232,255,.16)';
+  ctx.lineWidth = 1;
+  for (let r = 22; r <= 66; r += 22) {
+    ctx.beginPath();
+    ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(143,232,255,.38)';
+  const a = progress * Math.PI * 2;
+  ctx.beginPath();
+  ctx.moveTo(c, c);
+  ctx.lineTo(c + Math.cos(a) * 66, c + Math.sin(a) * 66);
+  ctx.stroke();
+  ctx.fillStyle = '#8fe8ff';
+  for (let i = 0; i < 18; i++) {
+    const aa = i * 1.71 + progress * 2;
+    const rr = 10 + ((i * 19) % 58);
+    ctx.globalAlpha = 0.35 + ((i % 5) / 5) * 0.5;
+    ctx.beginPath();
+    ctx.arc(c + Math.cos(aa) * rr, c + Math.sin(aa) * rr, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function initScroll() {
+  gsap.registerPlugin(ScrollTrigger);
+  const lenis = window.Lenis ? new window.Lenis({ smoothWheel: true, lerp: 0.075 }) : null;
+  if (lenis) {
+    lenis.on('scroll', ScrollTrigger.update);
+    gsap.ticker.add((time) => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+  }
+
+  ScrollTrigger.create({
+    trigger: document.body,
+    start: 'top top',
+    end: 'bottom bottom',
+    scrub: true,
+    onUpdate: (self) => syncScroll(self.progress)
+  });
+
+  const track = document.querySelector('.horizontal-track');
+  const panels = gsap.utils.toArray('.h-panel');
+  const horizontalTween = gsap.to(track, {
+    x: () => -(track.scrollWidth - innerWidth),
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '#horizontal',
+      start: 'top top',
+      end: () => `+=${track.scrollWidth - innerWidth}`,
+      scrub: 1,
+      pin: true,
+      anticipatePin: 1,
+      invalidateOnRefresh: true,
+      onUpdate: (self) => {
+        horizontalProgress = self.progress;
+        coreGroup.rotation.y = self.progress * Math.PI * 2.0;
+        portalLight.intensity = portalVisible ? ((darkGrade ? 2.0 : 5.0) + self.progress * (darkGrade ? 4.5 : 9.0)) : 0;
+      }
+    }
+  });
+
+  panels.forEach((panel, index) => {
+    ScrollTrigger.create({
+      trigger: panel,
+      containerAnimation: horizontalTween,
+      start: 'left center',
+      end: 'right center',
+      onEnter: () => activateHorizontal(index),
+      onEnterBack: () => activateHorizontal(index)
+    });
+  });
+}
+
+function activateHorizontal(index) {
+  const colors = [0x62e8ff, 0x8fe8ff, 0xffce62, 0x9d7cff, 0x7af7d4];
+  coreUniforms.uTint.value.setHex(colors[index] || 0x62e8ff);
+  if (index === 1) {
+    bloomPass.strength = darkGrade ? 0.42 : 0.95;
+    afterimagePass.enabled = true;
+  }
+  if (index === 2) coreUniforms.uWire.value = 0.35;
+  if (index === 3) filmPass.enabled = true;
+  if (index === 4) {
+    rgbShiftPass.enabled = true;
+    glitchPass.enabled = true;
+    setTimeout(() => { if (!document.querySelector('[data-fx="glitch"]')?.classList.contains('active')) glitchPass.enabled = false; }, 900);
+  }
+  updateFxState();
+}
+
+function animate() {
+  const delta = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  coreUniforms.uTime.value = t;
+  if (glbMixer) glbMixer.update(delta);
+
+  deepStars.userData.starMaterial.uniforms.uTime.value = t;
+  nearStars.userData.starMaterial.uniforms.uTime.value = t;
+  deepStars.rotation.y += delta * 0.014;
+  nearStars.rotation.y -= delta * 0.026;
+  smokeGroup.rotation.y += delta * 0.018;
+  coreGroup.rotation.x = Math.sin(t * 0.38) * 0.08;
+  coreGroup.rotation.y += delta * (0.18 + horizontalProgress * 0.35);
+  ringGroup.children.forEach((ring, i) => {
+    ring.rotation.z += delta * (0.22 + i * 0.055);
+    ring.rotation.x += delta * 0.02;
+  });
+  arcGroup.children.forEach((arc, i) => {
+    arc.material.opacity = 0.12 + 0.18 * (0.5 + 0.5 * Math.sin(t * 1.8 + i));
+  });
+  asteroids.rotation.y += delta * 0.035;
+  lod.rotation.y += delta * 0.4;
+  portalGroup.children.forEach((child, i) => {
+    child.rotation.z += delta * (0.08 + i * 0.03);
+  });
+
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(selectedObjects, true);
+  hoverObject = hits[0]?.object || null;
+  if (hoverObject) cursorLabel.textContent = 'VIEW';
+  else if (!transformControls.dragging) cursorLabel.textContent = 'SCROLL';
+
+  const d = camera.position.distanceTo(coreGroup.position).toFixed(2);
+  document.querySelector('#distanceRuler strong').textContent = `${d} u`;
+
+  controls.update();
+  composer.render(delta);
+  labelRenderer.render(scene, camera);
+}
+renderer.setAnimationLoop(animate);
+
+function resize() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  labelRenderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  outlinePass.resolution.set(innerWidth, innerHeight);
+  ssaoPass.setSize(innerWidth, innerHeight);
+  smaaPass.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
+  deepStars.userData.starMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+  nearStars.userData.starMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+  ScrollTrigger.refresh();
+}
+window.addEventListener('resize', resize);
+
+setAllFxPreset('reset');
+syncScroll(getPageProgress());
+drawSequence(0);
+drawRadar(0);
+initScroll();
+
+window.CosmicNexusV9 = {
+  scene,
+  camera,
+  renderer,
+  composer,
+  passes: { bloomPass, glitchPass, rgbShiftPass, filmPass, afterimagePass, bokehPass, ssaoPass, outlinePass },
+  core,
+  coreUniforms,
+  loadGLB: () => document.querySelector('#loadGlbBtn')?.click(),
+  toggleFx
+};

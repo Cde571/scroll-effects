@@ -1,0 +1,20 @@
+﻿/* V12: Mission Mode OFF. Oculta restos de la capa de misión si quedaron en HTML. */
+.mission-v11,
+.mission-panel,
+.mission-map,
+.mission-objectives,
+.mission-log,
+.mission-launch,
+.mission-scanner,
+.mission-overlay,
+#missionV11,
+#missionMode,
+#missionPanel,
+#missionMap,
+#missionObjectives,
+#missionScanner,
+#missionLaunch {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

@@ -1,0 +1,89 @@
+﻿/* V13 — Early title exit fix
+   El hero "Cosmic Nexus Scroll Atlas" desaparece mucho antes para no cruzarse
+   con el capítulo "Cámara sobre riel" ni con el recorrido de cámara. */
+:root{
+  --title-clear-cut: 0;
+}
+
+.hero-copy{
+  max-width: min(710px, 52vw);
+  transition: visibility 0s linear .12s;
+}
+
+.hero-copy .lead,
+.hero-copy .hero-actions,
+.hero-copy .kicker{
+  transition: opacity .18s ease, transform .18s ease, filter .18s ease;
+}
+
+body.title-clear-camera-rail .hero-copy .lead,
+body.title-clear-camera-rail .hero-copy .hero-actions,
+body.title-clear-camera-rail .hero-copy .kicker{
+  opacity: 0;
+  transform: translateY(-18px);
+  filter: blur(6px);
+}
+
+body.title-hero-gone .hero-copy{
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* El título dinámico de capítulos queda más pequeño y en esquina,
+   no en el centro, para dejar limpia la escena 3D. */
+.kinetic-title-dock{
+  top: 78px !important;
+  left: auto !important;
+  right: clamp(18px, 4vw, 58px) !important;
+  width: min(460px, 42vw) !important;
+  text-align: right !important;
+  transform: translate3d(0, var(--chapter-title-y), 0) rotate(var(--chapter-title-rotate)) !important;
+  filter: drop-shadow(0 18px 44px rgba(0,0,0,.72));
+}
+
+.kinetic-title-dock::before{
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+  width: min(330px, 38vw) !important;
+  opacity: .65;
+}
+
+.kinetic-title-main{
+  font-size: clamp(18px, 2.55vw, 42px) !important;
+  letter-spacing: -.04em !important;
+}
+
+.kinetic-title-kicker{
+  font-size: 9px !important;
+  letter-spacing: .22em !important;
+  color: rgba(143,232,255,.62) !important;
+}
+
+.kinetic-title-dock .chapter-meter{
+  margin-right: 0 !important;
+  width: min(280px, 36vw) !important;
+}
+
+.kinetic-orbit-word{
+  opacity: calc(var(--chapter-title-opacity) * .36) !important;
+}
+
+.title-motion-hint{
+  display: none !important;
+}
+
+/* En pantallas medianas, ocultamos el dock para no tapar cámara/UI. */
+@media (max-width: 1080px){
+  .kinetic-title-dock{
+    top: 72px !important;
+    right: 14px !important;
+    width: min(360px, 48vw) !important;
+  }
+  .kinetic-title-main{font-size: clamp(16px, 3.2vw, 32px) !important;}
+}
+
+@media (max-width: 760px){
+  .hero-copy{visibility:hidden !important; opacity:0 !important;}
+  .kinetic-title-dock{display:none !important;}
+}

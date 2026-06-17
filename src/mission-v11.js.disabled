@@ -1,0 +1,468 @@
+﻿import * as THREE from 'three';
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+async function getApi() {
+  for (let i = 0; i < 120; i++) {
+    if (window.CosmicNexusV9?.scene && window.CosmicNexusV9?.camera) return window.CosmicNexusV9;
+    await wait(100);
+  }
+  return null;
+}
+
+const api = await getApi();
+if (!api) {
+  console.warn('[V11] No se encontró window.CosmicNexusV9. El overlay UI se cargará, pero sin escena 3D extendida.');
+}
+
+document.body.classList.add('v11-mode');
+
+autoInjectUI();
+const state = {
+  progress: 0,
+  chapter: 0,
+  scanActive: false,
+  starmapOpened: false,
+  launchDone: false,
+  audioOn: false,
+  audio: null,
+  missionDone: new Set(),
+  pointer: { x: innerWidth * .5, y: innerHeight * .5 }
+};
+
+const chapters = [
+  { key:'opening', label:'Opening Transmission', text:'El portal de entrada calibra la escena, baja el brillo y prepara el viaje.' },
+  { key:'core', label:'Core Scanner', text:'El núcleo responde al puntero: scanner, datos y lectura energética.' },
+  { key:'blackgate', label:'Black Hole Gate', text:'La distorsión gravitacional se abre con scroll, RGB shift y túnel oscuro.' },
+  { key:'mission', label:'Mission Mode', text:'Objetivos interactivos convierten la demo en una experiencia con propósito.' },
+  { key:'starmap', label:'Galactic Map', text:'Mapa de navegación por nodos para saltar entre capítulos inmersivos.' },
+  { key:'launch', label:'Launch Sequence', text:'Secuencia final: vibración, postproceso, estela y cierre cinematográfico.' }
+];
+
+let v11Root = null;
+let blackGate = null;
+let tunnel = null;
+let probe = null;
+let starLines = null;
+let scanGrid = null;
+let launchTrail = null;
+let clock = new THREE.Clock();
+
+if (api) buildThreeAddons(api);
+bindUI();
+update();
+requestAnimationFrame(loop);
+
+function autoInjectUI(){
+  if (document.querySelector('.v11-intro-portal')) return;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="v11-intro-portal" id="v11Intro">
+      <div class="v11-intro-ring"></div>
+      <div class="v11-intro-core">
+        <span class="eyebrow">COSMIC NEXUS / V11 MISSION MODE</span>
+        <h2>Enter<br><b>The Unknown</b></h2>
+        <p>Una entrada cinematográfica con portal, capítulos narrativos, scanner, mapa galáctico, black hole gate, audio reactivo y secuencia final de lanzamiento.</p>
+        <div class="v11-intro-actions">
+          <button class="v11-btn primary" id="v11EnterBtn">Entrar al atlas</button>
+          <button class="v11-btn" id="v11SkipBtn">Saltar intro</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="v11-mission-panel" id="v11MissionPanel">
+      <span class="eyebrow">mission mode</span>
+      <h3>Nexus Protocol</h3>
+      <div class="v11-mission-list">
+        <div class="v11-mission" data-mission="scroll"><i>01</i><span>Iniciar recorrido por scroll</span><em>OPEN</em></div>
+        <div class="v11-mission" data-mission="scan"><i>02</i><span>Escanear el núcleo</span><em>OPEN</em></div>
+        <div class="v11-mission" data-mission="gate"><i>03</i><span>Abrir Black Gate</span><em>OPEN</em></div>
+        <div class="v11-mission" data-mission="map"><i>04</i><span>Usar mapa galáctico</span><em>OPEN</em></div>
+        <div class="v11-mission" data-mission="launch"><i>05</i><span>Activar lanzamiento final</span><em>OPEN</em></div>
+      </div>
+      <div class="v11-mission-actions">
+        <button class="v11-btn" id="v11ScanBtn">Scan</button>
+        <button class="v11-btn" id="v11MapBtn">Mapa</button>
+        <button class="v11-btn primary" id="v11LaunchBtn">Launch</button>
+        <button class="v11-btn" id="v11AudioBtn">Audio V11</button>
+      </div>
+    </aside>
+
+    <div class="v11-chapter-marquee" id="v11Chapter">
+      <small>00 / opening transmission</small>
+      <strong>Opening Transmission</strong>
+      <span>El portal calibra la escena.</span>
+      <div class="v11-chapter-progress"><i></i></div>
+    </div>
+
+    <div class="v11-scanner" id="v11Scanner"><i class="v11-scanner-line"></i></div>
+    <aside class="v11-scanner-hud" id="v11ScannerHud">
+      <span class="eyebrow">live object scanner</span>
+      <h3>Core telemetry</h3>
+      <div class="v11-scan-grid">
+        <div><b>Energy</b><span id="v11Energy">--</span></div>
+        <div><b>Signal</b><span id="v11Signal">--</span></div>
+        <div><b>Gravity</b><span id="v11Gravity">--</span></div>
+        <div><b>Material</b><span id="v11Material">Plasma</span></div>
+      </div>
+    </aside>
+
+    <div class="v11-starmap" id="v11Starmap">
+      <div class="v11-map-shell">
+        <button class="v11-btn v11-map-close" id="v11MapClose">Cerrar</button>
+        <span class="eyebrow">galactic navigation</span>
+        <h2>Nexus Star Map</h2>
+        <button class="v11-map-node" style="left:13%;top:34%" data-target="#intro"><span><i>00</i>Inicio</span></button>
+        <button class="v11-map-node" style="left:42%;top:22%" data-target="#immersive"><span><i>01</i>Core</span></button>
+        <button class="v11-map-node" style="left:68%;top:38%" data-target="#blackgate-v11"><span><i>02</i>Black Gate</span></button>
+        <button class="v11-map-node" style="left:24%;top:66%" data-target="#horizontal"><span><i>03</i>Horizontal</span></button>
+        <button class="v11-map-node" style="left:52%;top:66%" data-target="#mission-v11"><span><i>04</i>Misión</span></button>
+        <button class="v11-map-node" style="left:75%;top:72%" data-target="#launch-v11"><span><i>05</i>Launch</span></button>
+      </div>
+    </div>
+
+    <div class="v11-launch-overlay" id="v11LaunchOverlay">
+      <div class="v11-launch-title">
+        <small>mission ready</small>
+        <strong>Launch<br>Sequence</strong>
+      </div>
+    </div>
+  `);
+}
+
+function buildThreeAddons({ scene, camera }){
+  v11Root = new THREE.Group();
+  v11Root.name = 'V11_Mission_Mode_Addons';
+  scene.add(v11Root);
+
+  blackGate = new THREE.Group();
+  blackGate.name = 'V11_Black_Hole_Gate';
+  blackGate.position.set(0, 0.1, -13);
+  blackGate.visible = false;
+  const hole = new THREE.Mesh(
+    new THREE.SphereGeometry(1.12, 64, 64),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
+  );
+  const diskMat = new THREE.ShaderMaterial({
+    transparent:true,
+    depthWrite:false,
+    side:THREE.DoubleSide,
+    blending:THREE.AdditiveBlending,
+    uniforms:{ uTime:{ value:0 }, uPower:{ value:0 } },
+    vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`
+      varying vec2 vUv; uniform float uTime; uniform float uPower;
+      void main(){
+        vec2 p=vUv-.5; float r=length(p)*2.0; float a=atan(p.y,p.x);
+        float ring=smoothstep(1.0,.28,r)*smoothstep(.18,.38,r);
+        float bands=.5+.5*sin(a*18.0-r*32.0-uTime*2.8);
+        vec3 cold=vec3(.18,.35,1.0); vec3 hot=vec3(1.0,.32,.07);
+        vec3 col=mix(cold,hot,clamp(bands+r*.15,0.0,1.0));
+        gl_FragColor=vec4(col*(.35+uPower*.85), ring*(.18+.62*uPower));
+      }`
+  });
+  const disk = new THREE.Mesh(new THREE.RingGeometry(1.55, 4.6, 192, 6), diskMat);
+  disk.rotation.x = Math.PI / 2.24;
+  const lens = new THREE.Mesh(
+    new THREE.SphereGeometry(1.88, 64, 64),
+    new THREE.MeshBasicMaterial({ color:0x6f7dff, transparent:true, opacity:.08, wireframe:true, blending:THREE.AdditiveBlending })
+  );
+  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.34,.025,10,160), new THREE.MeshBasicMaterial({ color:0x8fe8ff, transparent:true, opacity:.38, blending:THREE.AdditiveBlending }));
+  ringA.rotation.x = Math.PI / 2.24;
+  blackGate.add(hole,disk,lens,ringA);
+  blackGate.userData.diskMat = diskMat;
+  v11Root.add(blackGate);
+
+  tunnel = new THREE.Group();
+  tunnel.name = 'V11_Wormhole_Tunnel';
+  for(let i=0;i<34;i++){
+    const r = 1.2 + i * .17;
+    const mat = new THREE.MeshBasicMaterial({ color:i%2?0x8fe8ff:0x9d7cff, transparent:true, opacity:0, wireframe:true, blending:THREE.AdditiveBlending });
+    const tor = new THREE.Mesh(new THREE.TorusGeometry(r,.006,6,96), mat);
+    tor.position.z = -4 - i * .58;
+    tor.rotation.x = Math.PI / 2;
+    tor.rotation.z = i * .25;
+    tunnel.add(tor);
+  }
+  v11Root.add(tunnel);
+
+  scanGrid = new THREE.Group();
+  scanGrid.name = 'V11_Scanner_Grid';
+  for(let i=0;i<11;i++){
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3+i*.6,-1.6,0), new THREE.Vector3(-3+i*.6,1.6,0)]);
+    scanGrid.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color:0x8fe8ff, transparent:true, opacity:.06 })));
+    const lineGeo2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3,-1.6+i*.32,0), new THREE.Vector3(3,-1.6+i*.32,0)]);
+    scanGrid.add(new THREE.Line(lineGeo2, new THREE.LineBasicMaterial({ color:0x7af7d4, transparent:true, opacity:.045 })));
+  }
+  scanGrid.position.set(0,0,-.85);
+  scanGrid.visible = false;
+  v11Root.add(scanGrid);
+
+  const linePoints = [];
+  for(let i=0;i<18;i++){
+    const a = i / 18 * Math.PI * 2;
+    const b = ((i*7)%18) / 18 * Math.PI * 2;
+    linePoints.push(new THREE.Vector3(Math.cos(a)*12, Math.sin(a*1.7)*3, Math.sin(a)*8));
+    linePoints.push(new THREE.Vector3(Math.cos(b)*12, Math.sin(b*1.7)*3, Math.sin(b)*8));
+  }
+  starLines = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(linePoints),
+    new THREE.LineBasicMaterial({ color:0x8fe8ff, transparent:true, opacity:.035, blending:THREE.AdditiveBlending })
+  );
+  starLines.name = 'V11_Constellation_Network';
+  starLines.position.z = -8;
+  v11Root.add(starLines);
+
+  probe = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(.12,.48,18), new THREE.MeshPhysicalMaterial({ color:0xeef8ff, metalness:.82, roughness:.18, emissive:0x123c56, emissiveIntensity:.25 }));
+  body.rotation.x = Math.PI / 2;
+  const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map:createGlowTexture(), color:0x8fe8ff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+  flame.position.z = .36; flame.scale.set(.55,.55,.55);
+  probe.add(body, flame);
+  probe.position.set(0,-.3,1.4);
+  probe.visible = false;
+  probe.userData.flame = flame;
+  v11Root.add(probe);
+
+  const trailGeo = new THREE.BufferGeometry();
+  const trailPos = new Float32Array(80 * 3);
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos,3));
+  launchTrail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color:0x8fe8ff, transparent:true, opacity:0, blending:THREE.AdditiveBlending }));
+  launchTrail.geometry.setDrawRange(0,0);
+  launchTrail.userData.positions = trailPos;
+  v11Root.add(launchTrail);
+
+  window.CosmicNexusV11 = { root:v11Root, blackGate, tunnel, probe, starLines, scanGrid, triggerLaunch, openStarMap, activateScanner };
+}
+
+function createGlowTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const ctx=c.getContext('2d'); const g=ctx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.22,'rgba(143,232,255,.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+
+function bindUI(){
+  document.getElementById('v11EnterBtn')?.addEventListener('click', hideIntro);
+  document.getElementById('v11SkipBtn')?.addEventListener('click', hideIntro);
+  setTimeout(hideIntro, 4200);
+  document.getElementById('v11ScanBtn')?.addEventListener('click', activateScanner);
+  document.getElementById('v11MapBtn')?.addEventListener('click', openStarMap);
+  document.getElementById('v11MapClose')?.addEventListener('click', closeStarMap);
+  document.getElementById('v11LaunchBtn')?.addEventListener('click', triggerLaunch);
+  document.getElementById('v11AudioBtn')?.addEventListener('click', toggleAudio);
+  document.querySelectorAll('.v11-map-node').forEach(btn=>btn.addEventListener('click',()=>{
+    completeMission('map');
+    closeStarMap();
+    const target = document.querySelector(btn.dataset.target);
+    if(target) target.scrollIntoView({behavior:'smooth'});
+  }));
+  window.addEventListener('pointermove', e => {
+    state.pointer.x = e.clientX; state.pointer.y = e.clientY;
+    const scanner = document.getElementById('v11Scanner');
+    if(scanner){ scanner.style.left = `${e.clientX}px`; scanner.style.top = `${e.clientY}px`; }
+  }, {passive:true});
+  window.addEventListener('keydown', e=>{
+    if(e.code === 'KeyM') openStarMap();
+    if(e.code === 'KeyS') activateScanner();
+    if(e.code === 'KeyP') triggerLaunch();
+  });
+  window.addEventListener('scroll', update, {passive:true});
+}
+
+function hideIntro(){
+  document.getElementById('v11Intro')?.classList.add('is-hidden');
+  completeMission('scroll');
+}
+
+function openStarMap(){
+  document.getElementById('v11Starmap')?.classList.add('open');
+  state.starmapOpened = true;
+  completeMission('map');
+}
+function closeStarMap(){ document.getElementById('v11Starmap')?.classList.remove('open'); }
+
+function activateScanner(){
+  state.scanActive = true;
+  completeMission('scan');
+  const s=document.getElementById('v11Scanner');
+  const hud=document.getElementById('v11ScannerHud');
+  s?.classList.add('active'); hud?.classList.add('active');
+  if(scanGrid) scanGrid.visible = true;
+  setTimeout(()=>{ state.scanActive=false; s?.classList.remove('active'); hud?.classList.remove('active'); if(scanGrid) scanGrid.visible=false; }, 7000);
+}
+
+function toggleAudio(){
+  if(!state.audio) initAudio();
+  state.audioOn = !state.audioOn;
+  const now = state.audio.ctx.currentTime;
+  state.audio.gain.gain.cancelScheduledValues(now);
+  state.audio.gain.gain.setTargetAtTime(state.audioOn ? .032 : 0.0001, now, .12);
+  document.getElementById('v11AudioBtn').textContent = state.audioOn ? 'Audio ON' : 'Audio V11';
+}
+function initAudio(){
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const gain = ctx.createGain(); gain.gain.value = 0.0001;
+  const filter = ctx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=340;
+  const osc1 = ctx.createOscillator(); osc1.type='sine'; osc1.frequency.value=48;
+  const osc2 = ctx.createOscillator(); osc2.type='triangle'; osc2.frequency.value=96;
+  const lfo = ctx.createOscillator(); lfo.type='sine'; lfo.frequency.value=.08;
+  const lfoGain = ctx.createGain(); lfoGain.gain.value=35;
+  lfo.connect(lfoGain).connect(osc2.frequency);
+  osc1.connect(filter); osc2.connect(filter); filter.connect(gain).connect(ctx.destination);
+  osc1.start(); osc2.start(); lfo.start();
+  ctx.resume();
+  state.audio = {ctx,gain,filter,osc1,osc2};
+}
+
+function triggerLaunch(){
+  state.launchDone = true;
+  completeMission('launch');
+  document.getElementById('v11LaunchOverlay')?.classList.add('active');
+  if(api){
+    api.passes.afterimagePass.enabled = true;
+    api.passes.rgbShiftPass.enabled = true;
+    api.passes.bloomPass.strength = Math.min(.75, api.passes.bloomPass.strength + .25);
+    if(probe){ probe.visible=true; probe.position.set(0,-.2,1.4); probe.userData.launchStart = performance.now(); }
+  }
+  setTimeout(()=>document.getElementById('v11LaunchOverlay')?.classList.remove('active'), 4200);
+}
+
+function completeMission(key){
+  if(state.missionDone.has(key)) return;
+  state.missionDone.add(key);
+  const el = document.querySelector(`.v11-mission[data-mission="${key}"]`);
+  if(el){ el.classList.add('done'); el.querySelector('em').textContent='DONE'; }
+}
+
+function getProgress(){
+  const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+  return Math.max(0, Math.min(1, scrollY / max));
+}
+
+function update(){
+  state.progress = getProgress();
+  if(state.progress > .035) completeMission('scroll');
+  if(state.progress > .52) completeMission('gate');
+  if(state.progress > .88 && !state.launchDone) completeMission('launch');
+
+  const chapter = Math.min(chapters.length - 1, Math.floor(state.progress * chapters.length));
+  state.chapter = chapter;
+  updateChapterUI(chapter, state.progress);
+  updateMissionsByScroll(state.progress);
+  updateScannerStats(state.progress);
+  updateAudioByScroll(state.progress);
+  updateThreeByScroll(state.progress);
+}
+
+function updateChapterUI(index, p){
+  const c = chapters[index];
+  const shell = document.getElementById('v11Chapter');
+  if(!shell) return;
+  shell.querySelector('small').textContent = `${String(index).padStart(2,'0')} / ${c.key}`;
+  shell.querySelector('strong').textContent = c.label;
+  shell.querySelector('span').textContent = c.text;
+  shell.querySelector('.v11-chapter-progress i').style.width = `${Math.round(p*100)}%`;
+}
+function updateMissionsByScroll(p){
+  if(p>.16 && p<.42 && !state.scanActive) {
+    const s = document.getElementById('v11Scanner');
+    s?.classList.add('active');
+  } else if(!state.scanActive) document.getElementById('v11Scanner')?.classList.remove('active');
+}
+function updateScannerStats(p){
+  const energy = document.getElementById('v11Energy');
+  const signal = document.getElementById('v11Signal');
+  const gravity = document.getElementById('v11Gravity');
+  const material = document.getElementById('v11Material');
+  if(!energy) return;
+  energy.textContent = `${Math.round(48 + p * 51)}%`;
+  signal.textContent = p > .55 ? 'BLACK GATE' : p > .28 ? 'CORE LOCK' : 'SEARCHING';
+  gravity.textContent = `${(0.8 + p * 3.7).toFixed(2)} g`; 
+  material.textContent = document.getElementById('materialName')?.textContent || 'Plasma';
+}
+function updateAudioByScroll(p){
+  if(!state.audio || !state.audioOn) return;
+  const now = state.audio.ctx.currentTime;
+  state.audio.filter.frequency.setTargetAtTime(260 + p*1150, now, .12);
+  state.audio.osc1.frequency.setTargetAtTime(42 + p*36, now, .12);
+  state.audio.osc2.frequency.setTargetAtTime(84 + p*72, now, .12);
+}
+
+function updateThreeByScroll(p){
+  if(!api) return;
+  const t = performance.now() * .001;
+  if(blackGate){
+    const gate = smoothstep(.42,.72,p);
+    blackGate.visible = gate > .01;
+    blackGate.scale.setScalar(.55 + gate * 1.35);
+    blackGate.rotation.z += .003 + gate*.012;
+    blackGate.userData.diskMat.uniforms.uTime.value = t;
+    blackGate.userData.diskMat.uniforms.uPower.value = gate;
+  }
+  if(tunnel){
+    const w = smoothstep(.48,.82,p);
+    tunnel.children.forEach((ring,i)=>{
+      ring.material.opacity = w * (.018 + (i/34)*.075);
+      ring.rotation.z += .002 + i*.00008;
+    });
+  }
+  if(starLines){
+    starLines.material.opacity = .025 + smoothstep(.18,.5,p) * .075;
+    starLines.rotation.y += .0009;
+  }
+  if(scanGrid){
+    scanGrid.rotation.z = Math.sin(t*.6)*.05;
+    scanGrid.position.z = -0.85 - Math.sin(t)*.05;
+  }
+  if(api.core){
+    const pulse = state.scanActive ? 1.0 : 0.0;
+    api.core.scale.setScalar(1 + pulse*.05 + smoothstep(.86,1,p)*.18*Math.sin(t*9));
+  }
+  if(api.coreUniforms){
+    api.coreUniforms.uReveal.value = Math.max(api.coreUniforms.uReveal.value, smoothstep(.14,.45,p));
+    api.coreUniforms.uEnergy.value = Math.max(api.coreUniforms.uEnergy.value, state.scanActive ? 1 : smoothstep(.72,.95,p));
+  }
+  const gateBoost = smoothstep(.52,.68,p) * (1 - smoothstep(.82,.95,p));
+  api.passes.rgbShiftPass.enabled = gateBoost > .08 || api.passes.rgbShiftPass.enabled;
+  if(api.passes.rgbShiftPass.uniforms?.amount) api.passes.rgbShiftPass.uniforms.amount.value = 0.0015 + gateBoost * 0.010;
+  if(api.passes.glitchPass) api.passes.glitchPass.enabled = gateBoost > .45;
+  if(api.passes.afterimagePass) api.passes.afterimagePass.enabled = gateBoost > .35 || state.launchDone;
+  if(api.passes.bokehPass) api.passes.bokehPass.enabled = gateBoost > .55;
+  if(api.passes.bloomPass) api.passes.bloomPass.strength = 0.20 + gateBoost * .32 + smoothstep(.86,1,p)*.18;
+
+  updateProbeLaunch(t);
+}
+
+function updateProbeLaunch(t){
+  if(!probe?.visible || !probe.userData.launchStart) return;
+  const e = Math.min(1, (performance.now() - probe.userData.launchStart) / 3600);
+  probe.position.z = 1.4 - e * 11;
+  probe.position.y = -0.2 + Math.sin(e*Math.PI)*1.1;
+  probe.rotation.z += .08;
+  probe.userData.flame.material.opacity = 0.8 * (1-e*.35);
+  probe.userData.flame.scale.setScalar(.45 + e*1.5);
+  if(launchTrail){
+    const arr = launchTrail.userData.positions;
+    for(let i=79;i>0;i--){ arr[i*3]=arr[(i-1)*3]; arr[i*3+1]=arr[(i-1)*3+1]; arr[i*3+2]=arr[(i-1)*3+2]; }
+    arr[0]=probe.position.x; arr[1]=probe.position.y; arr[2]=probe.position.z;
+    launchTrail.geometry.attributes.position.needsUpdate = true;
+    launchTrail.geometry.setDrawRange(0,80);
+    launchTrail.material.opacity = .7 * (1-e*.3);
+  }
+  if(e>=1){
+    probe.userData.launchStart = null;
+    setTimeout(()=>{ if(probe) probe.visible=false; if(launchTrail) launchTrail.material.opacity=0; },700);
+  }
+}
+
+function smoothstep(min,max,value){ const x=Math.max(0,Math.min(1,(value-min)/(max-min))); return x*x*(3-2*x); }
+
+function loop(){
+  if(api && blackGate){
+    // keep lightweight animation alive even without scroll.
+    const p = state.progress;
+    if(blackGate.visible) blackGate.rotation.y += .0015;
+  }
+  requestAnimationFrame(loop);
+}

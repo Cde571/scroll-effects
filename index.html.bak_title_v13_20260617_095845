@@ -1,0 +1,301 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#02040a" />
+  <title>COSMIC NEXUS — Immersive Scroll Atlas</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <link rel="stylesheet" href="src/styles.css" />`r`n  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="src/mission-mode-off.css">
+</head>
+<body>
+  <noscript>Necesitas JavaScript activado para ver esta experiencia.</noscript>
+
+  <canvas id="webgl" aria-label="Escena espacial Three.js"></canvas>
+  <div id="labelLayer"></div>
+  <div id="xrMount" class="xr-mount"></div>
+
+  <div class="grain-layer" id="grainLayer"></div>
+  <div class="scanline-layer" id="scanlineLayer"></div>
+  <div class="vignette-layer"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#intro" aria-label="Inicio">
+      <span class="brand-dot"></span>
+      <span>COSMIC NEXUS</span>
+      <em>KINETIC ATLAS V10</em>
+    </a>
+    <nav class="nav">
+      <a href="#intro">Inicio</a>
+      <a href="#immersive">Scroll</a>
+      <a href="#horizontal">Horizontal</a>
+      <a href="#fxlab">FX Lab</a>
+      <a href="#mission-v11">Misión</a>`r`n      <a href="#blackgate-v11">Black Gate</a>`r`n      <a href="#pipeline">Blender</a>
+    </nav>
+    <div class="top-actions">
+      <button id="audioBtn" class="pill-btn" type="button">Audio OFF</button>
+      <button id="fullBtn" class="pill-btn" type="button">Full</button>
+    </div>
+  </header>
+
+  <aside class="chapter-rail" aria-label="Capítulos">
+    <span data-step="0" class="active">00</span>
+    <span data-step="1">01</span>
+    <span data-step="2">02</span>
+    <span data-step="3">03</span>
+    <span data-step="4">04</span>
+    <span data-step="5">05</span>
+  </aside>
+
+  <div class="hero-copy" id="heroCopy">
+    <p class="kicker">three.js / gsap scrolltrigger / webgl postprocessing / immersive horizontal journey</p>
+    <h1><span>Cosmic</span><span>Nexus</span><span>Scroll Atlas</span></h1>
+    <p class="lead">Versión V10 Kinetic Title: conserva todos los efectos, mantiene el look oscuro y convierte el título en un elemento vivo que se desplaza, se fragmenta, se reduce y cambia por capítulo con el scroll.</p>
+    <div class="hero-actions">
+      <a class="primary-link" href="#immersive">Iniciar recorrido</a>
+      <a class="ghost-link" href="#fxlab">Ver laboratorio</a>
+    </div>
+  </div>
+
+  <section id="intro" class="scroll-section intro-section" data-title="Inicio"></section>
+  <section id="immersive" class="scroll-section narrative-section" data-title="Cámara inmersiva">
+    <div class="story-note left">
+      <span>01</span>
+      <h2>Cámara sobre riel</h2>
+      <p>Al bajar, la cámara viaja alrededor del núcleo, las órbitas se abren y el humo aparece como una nebulosa.</p>
+    </div>
+  </section>
+  <section class="scroll-section narrative-section" data-title="Shader reveal">
+    <div class="story-note right">
+      <span>02</span>
+      <h2>Shader highlight</h2>
+      <p>El scroll alimenta uniforms del shader: se activa una banda luminosa UV, fresnel, energía y bloom.</p>
+    </div>
+  </section>
+  <section class="scroll-section narrative-section" data-title="Portal">
+    <div class="story-note center">
+      <span>03</span>
+      <h2>Portal / wormhole</h2>
+      <p>La escena entra en modo portal con túnel, partículas, RGB shift, afterimage y cámara profunda.</p>
+    </div>
+  </section>
+
+  <section id="horizontal" class="horizontal-section" aria-label="Recorrido horizontal inmersivo">
+    <div class="horizontal-track">
+      <article class="h-panel" data-focus="orbit">
+        <span>04-A</span>
+        <h2>Orbital View</h2>
+        <p>La rueda vertical mueve este capítulo horizontalmente mientras el objeto 3D cambia su dirección y escala.</p>
+      </article>
+      <article class="h-panel" data-focus="engine">
+        <span>04-B</span>
+        <h2>Energy Core</h2>
+        <p>El núcleo se ilumina con shader, bloom y arcos de energía. Ideal para producto tecnológico o nave espacial.</p>
+      </article>
+      <article class="h-panel" data-focus="material">
+        <span>04-C</span>
+        <h2>Material Lab</h2>
+        <p>Cambia el acabado en vivo: plasma, titanio, carbón, oro, violeta, hielo y modo wireframe.</p>
+      </article>
+      <article class="h-panel" data-focus="data">
+        <span>04-D</span>
+        <h2>Documentary HUD</h2>
+        <p>Interfaz de datos tipo documental: telemetría, mini radar, línea de progreso y estado de efectos.</p>
+      </article>
+      <article class="h-panel" data-focus="launch">
+        <span>04-E</span>
+        <h2>Launch Sequence</h2>
+        <p>El portal se abre, el humo sube y la cámara ejecuta la transición final.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="fxlab" class="scroll-section lab-section" data-title="FX Lab">
+    <div class="lab-panel">
+      <p class="panel-eyebrow">FX Rack / Dark tuned real passes</p>
+      <h2>Laboratorio de efectos restaurado</h2>
+      <div class="fx-grid expanded">
+        <button data-fx="dark" class="active">Dark Grade</button>
+        <button data-fx="softbloom">Soft Bloom</button>
+        <button data-fx="maxfx">Max FX</button>
+        <button data-fx="resetfx">Reset FX</button>
+        <button data-fx="bloom">Bloom</button>
+        <button data-fx="glitch">Glitch</button>
+        <button data-fx="rgb">RGB Shift</button>
+        <button data-fx="film" class="active">Film</button>
+        <button data-fx="after">Afterimage</button>
+        <button data-fx="bokeh">Depth</button>
+        <button data-fx="ssao">SSAO</button>
+        <button data-fx="outline" class="active">Outline</button>
+        <button data-fx="scanlines">Scanlines</button>
+        <button data-fx="transform">Transform</button>
+        <button data-fx="wire">Wireframe</button>
+        <button data-fx="reduced">Reduced</button>
+        <button data-fx="stars" class="active">Stars</button>
+        <button data-fx="smoke" class="active">Smoke</button>
+        <button data-fx="portal" class="active">Portal</button>
+        <button data-fx="rings" class="active">Rings</button>
+        <button data-fx="arcs" class="active">Energy Arcs</button>
+        <button data-fx="asteroids" class="active">Instancing</button>
+        <button data-fx="grid" class="active">Scale Grid</button>
+        <button data-fx="labels" class="active">Labels</button>
+        <button data-fx="hud" class="active">HUD</button>
+        <button data-fx="radar" class="active">Radar</button>
+        <button data-fx="cursor" class="active">Cursor</button>
+        <button data-fx="lensflare" class="active">Lensflare</button>
+      </div>
+      <canvas id="sequenceCanvas" width="380" height="92" aria-label="Image sequence generada por scroll"></canvas>
+    </div>
+  </section>
+
+  <section id="effects-atlas" class="scroll-section effects-atlas-section" data-title="Effects Atlas">
+    <div class="effects-atlas-shell">
+      <p class="panel-eyebrow">Restored full index / no cards / constellation list</p>
+      <h2>Atlas completo de efectos</h2>
+      <p class="atlas-lead">Esta sección restaura los efectos anteriores como un índice visual tipo constelación. Los efectos marcados como <strong>LIVE</strong> están conectados al canvas; los marcados como <strong>READY</strong> quedan listos para assets reales como GLB, video, HDR o Lottie.</p>
+      <div class="effect-constellation">
+        <div class="effect-cluster"><h3>Scroll inmersivo</h3><ol>
+          <li><b>01</b><span>Vertical scroll camera dolly</span><em>LIVE</em></li>
+          <li><b>02</b><span>Scroll uniforms / shader reveal</span><em>LIVE</em></li>
+          <li><b>03</b><span>Pinned horizontal journey</span><em>LIVE</em></li>
+          <li><b>04</b><span>Horizontal chapter activation</span><em>LIVE</em></li>
+          <li><b>05</b><span>Portal transition by scroll</span><em>LIVE</em></li>
+          <li><b>06</b><span>Smoke reveal by scroll</span><em>LIVE</em></li>
+          <li><b>07</b><span>Image sequence canvas</span><em>LIVE</em></li>
+          <li><b>08</b><span>Scroll progress HUD</span><em>LIVE</em></li>
+          <li><b>09</b><span>Chapter rail</span><em>LIVE</em></li>
+          <li><b>10</b><span>Lenis smooth scroll</span><em>LIVE</em></li>
+        </ol></div>
+        <div class="effect-cluster"><h3>Postprocesamiento</h3><ol>
+          <li><b>11</b><span>EffectComposer</span><em>LIVE</em></li>
+          <li><b>12</b><span>UnrealBloomPass dark tuned</span><em>LIVE</em></li>
+          <li><b>13</b><span>OutlinePass selection</span><em>LIVE</em></li>
+          <li><b>14</b><span>GlitchPass</span><em>LIVE</em></li>
+          <li><b>15</b><span>RGBShiftShader</span><em>LIVE</em></li>
+          <li><b>16</b><span>FilmPass + grain</span><em>LIVE</em></li>
+          <li><b>17</b><span>Afterimage trail</span><em>LIVE</em></li>
+          <li><b>18</b><span>Bokeh depth of field</span><em>LIVE</em></li>
+          <li><b>19</b><span>SSAOPass</span><em>LIVE</em></li>
+          <li><b>20</b><span>SMAAPass</span><em>LIVE</em></li>
+        </ol></div>
+        <div class="effect-cluster"><h3>Three.js visual</h3><ol>
+          <li><b>21</b><span>Starfield Points</span><em>LIVE</em></li>
+          <li><b>22</b><span>Procedural smoke texture</span><em>LIVE</em></li>
+          <li><b>23</b><span>ShaderMaterial UV highlight</span><em>LIVE</em></li>
+          <li><b>24</b><span>Fresnel rim light</span><em>LIVE</em></li>
+          <li><b>25</b><span>Energy rings</span><em>LIVE</em></li>
+          <li><b>26</b><span>TubeGeometry energy arcs</span><em>LIVE</em></li>
+          <li><b>27</b><span>InstancedMesh asteroids</span><em>LIVE</em></li>
+          <li><b>28</b><span>LOD beacon</span><em>LIVE</em></li>
+          <li><b>29</b><span>FogExp2 atmosphere</span><em>LIVE</em></li>
+          <li><b>30</b><span>Lensflare</span><em>LIVE</em></li>
+        </ol></div>
+        <div class="effect-cluster"><h3>Interacción</h3><ol>
+          <li><b>31</b><span>OrbitControls</span><em>LIVE</em></li>
+          <li><b>32</b><span>TransformControls</span><em>LIVE</em></li>
+          <li><b>33</b><span>Raycaster selection</span><em>LIVE</em></li>
+          <li><b>34</b><span>CSS2D labels</span><em>LIVE</em></li>
+          <li><b>35</b><span>Cursor circular SVG</span><em>LIVE</em></li>
+          <li><b>36</b><span>Hold progress cursor</span><em>LIVE</em></li>
+          <li><b>37</b><span>Material swatches</span><em>LIVE</em></li>
+          <li><b>38</b><span>Fullscreen API</span><em>LIVE</em></li>
+          <li><b>39</b><span>AudioContext ambient</span><em>LIVE</em></li>
+          <li><b>40</b><span>Mini radar</span><em>LIVE</em></li>
+        </ol></div>
+        <div class="effect-cluster"><h3>Pipeline</h3><ol>
+          <li><b>41</b><span>GLTFLoader</span><em>READY</em></li>
+          <li><b>42</b><span>DRACOLoader</span><em>READY</em></li>
+          <li><b>43</b><span>KTX2Loader</span><em>READY</em></li>
+          <li><b>44</b><span>AnimationMixer</span><em>READY</em></li>
+          <li><b>45</b><span>WebXR VRButton</span><em>LIVE</em></li>
+          <li><b>46</b><span>Asset health check</span><em>LIVE</em></li>
+          <li><b>47</b><span>Blender GLB route</span><em>READY</em></li>
+          <li><b>48</b><span>VideoTexture route</span><em>READY</em></li>
+          <li><b>49</b><span>Lottie route</span><em>READY</em></li>
+          <li><b>50</b><span>HDR/KTX texture route</span><em>READY</em></li>
+        </ol></div>
+        <div class="effect-cluster"><h3>UI documental</h3><ol>
+          <li><b>51</b><span>HUD documental</span><em>LIVE</em></li>
+          <li><b>52</b><span>Material panel</span><em>LIVE</em></li>
+          <li><b>53</b><span>Distance ruler</span><em>LIVE</em></li>
+          <li><b>54</b><span>FX Rack expanded</span><em>LIVE</em></li>
+          <li><b>55</b><span>Dark grade toggle</span><em>LIVE</em></li>
+          <li><b>56</b><span>Reduced motion</span><em>LIVE</em></li>
+          <li><b>57</b><span>Scanlines overlay</span><em>LIVE</em></li>
+          <li><b>58</b><span>Film grain overlay</span><em>LIVE</em></li>
+          <li><b>59</b><span>Vignette contrast</span><em>LIVE</em></li>
+          <li><b>60</b><span>Responsive layout</span><em>LIVE</em></li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline" class="scroll-section pipeline-section" data-title="Pipeline">
+    <div class="pipeline-copy">
+      <p class="panel-eyebrow">Blender / GLB / DRACO / KTX2 / WebXR</p>
+      <h2>Pipeline preparado para assets reales</h2>
+      <p>Coloca <code>assets/models/model.glb</code> y pulsa <strong>Load GLB</strong>. El proyecto ya trae loader, DRACO, KTX2, AnimationMixer, WebXR y CSS2D labels.</p>
+      <div class="pipeline-actions">
+        <button id="loadGlbBtn" type="button">Load GLB</button>
+        <button id="assetCheckBtn" type="button">Asset check</button>
+        <button id="resetCameraBtn" type="button">Reset cámara</button>
+      </div>
+      <pre id="assetStatus">Listo para verificar assets.</pre>
+    </div>
+  </section>
+
+  <section class="scroll-section outro-section" data-title="Final">
+    <div class="outro-copy">
+      <h2>Scroll Atlas completado</h2>
+      <p>Ahora tienes una base full-screen para mezclar producto 3D, documental interactivo, sistema espacial, portfolio inmersivo o laboratorio de efectos WebGL.</p>
+    </div>
+  </section>
+
+  <div class="material-panel" id="materialPanel">
+    <div class="panel-top">
+      <span>Live material</span>
+      <strong id="materialName">Plasma cyan</strong>
+    </div>
+    <div class="swatches" id="swatches" aria-label="Cambiar material">
+      <button data-color="#62e8ff" data-name="Plasma cyan" class="active" style="--sw:#62e8ff"></button>
+      <button data-color="#0f172a" data-name="Carbon black" style="--sw:#0f172a"></button>
+      <button data-color="#ffce62" data-name="Solar gold" style="--sw:#ffce62"></button>
+      <button data-color="#ff4f88" data-name="Nebula rose" style="--sw:#ff4f88"></button>
+      <button data-color="#7af7d4" data-name="Aurora green" style="--sw:#7af7d4"></button>
+      <button data-color="#9d7cff" data-name="Ion violet" style="--sw:#9d7cff"></button>
+      <button data-color="#e7eef7" data-name="Titanium white" style="--sw:#e7eef7"></button>
+    </div>
+    <p>Arrastra el objeto · baja para activar cámara, humo, portal y horizontal scroll.</p>
+  </div>
+
+  <div class="dark-control" id="darkControl"><span>Glow</span><input id="glowRange" type="range" min="0" max="100" value="28" /><button id="darkPresetBtn" type="button">Dark</button></div>
+
+  <div class="doc-hud" id="docHud">
+    <div><strong id="scrollPercent">0%</strong><span>Scroll</span></div>
+    <div><strong id="chapterName">Hero</strong><span>Chapter</span></div>
+    <div><strong id="fxState">Bloom</strong><span>FX State</span></div>
+    <div class="bars"><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <div class="mini-radar" id="miniRadar"><canvas id="radarCanvas" width="144" height="144"></canvas><span>RADAR</span></div>
+  <div class="distance-ruler" id="distanceRuler">Distancia núcleo: <strong>--</strong></div>
+
+  <div class="cursor-ring" id="cursorRing"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="43"></circle><circle id="cursorProgress" cx="50" cy="50" r="43"></circle></svg><span id="cursorLabel">SCROLL</span></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/@studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+  <script type="module" src="src/main.js"></script>`r`n  </body>
+</html>
+
+
+
